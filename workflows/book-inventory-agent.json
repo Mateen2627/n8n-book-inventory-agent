@@ -1,0 +1,156 @@
+{
+  "name": "My workflow 2",
+  "nodes": [
+    {
+      "id": "4dc65d1e-3a9b-4d40-af5a-e0cccae22f05",
+      "name": "When chat message received",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.5,
+      "position": [100, 300],
+      "webhookId": "2d722de5-8c29-4570-9aa3-05e127f741ab",
+      "parameters": { "options": {} }
+    },
+    {
+      "id": "4dc924de-8d2d-4e21-a808-4574d5681b8f",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [300, 300],
+      "parameters": {
+        "options": {
+          "systemMessage": "You are an inventory assistant for a book store with access to the Airtable base \"Book Inventory Tracker\" (table \"Books\"). The base and table are already configured: never ask the user for a base ID, table name or field names. Tools: search_books lists every book with its record id and fields; update_book changes Quantity on Hand and Min Quantity of an existing book; create_book adds a new book. For any question about books, stock, quantities, Min Quantity, Reorder Threshold, location or price, call search_books with a title keyword first (empty keyword only when the whole inventory is needed) and answer from the returned records. To change a book: call search_books, find the exact book, then call update_book with its record id (starts with rec) and the new values, keeping the current value for any field not being changed. To add a book: check with search_books that it does not exist, then call create_book. Bulk changes: when the user asks to change many books at once, call search_books once with an empty keyword, then call update_book for every matching book. After a change, confirm what was updated in one short line per book. Be concise; use a list or table when showing several books."
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 5000
+    },
+    {
+      "id": "8b7f4a0d-1986-408a-94fe-721ffdc2f240",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [100, 450],
+      "parameters": {
+        "model": { "__rl": true, "mode": "list", "value": "gpt-5.4-mini", "cachedResultName": "gpt-5.4-mini" },
+        "options": { "reasoningEffort": "low" }
+      }
+    },
+    {
+      "id": "122d6af2-569b-4277-841e-392daf815a1e",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [100, 600],
+      "parameters": { "contextWindowLength": 3 }
+    },
+    {
+      "id": "b98c33d4-a0da-4e62-b73b-7c70c3bd4f17",
+      "name": "search_books",
+      "type": "n8n-nodes-base.airtableTool",
+      "typeVersion": 2.2,
+      "position": [100, 750],
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Find books (record id, Title, Author, Quantity on Hand, Min Quantity, Reorder Threshold, Location, Unit Cost) in the Books table. Pass a title keyword to get only matching books; pass an empty string only when the user needs the whole inventory.",
+        "operation": "search",
+        "filterByFormula": "={{ \"SEARCH(LOWER(\\\"\" + $fromAI(\"title_keyword\", \"Part of the book title to search for, or empty string to list all books\", \"string\").replace(/\"/g, \"\") + \"\\\"), LOWER({Title}))\" }}",
+        "base": { "__rl": true, "value": "app36dsMp7OBecovO", "mode": "list", "cachedResultName": "Book Inventory Tracker", "cachedResultUrl": "https://airtable.com/app36dsMp7OBecovO" },
+        "table": { "__rl": true, "value": "tblynJGo0IyKf5ujd", "mode": "list", "cachedResultName": "Books", "cachedResultUrl": "https://airtable.com/app36dsMp7OBecovO/tblynJGo0IyKf5ujd" },
+        "options": { "fields": ["Title", "Author", "Quantity on Hand", "Min Quantity", "Reorder Threshold", "Location", "Unit Cost"] }
+      },
+      "credentials": { "airtableTokenApi": { "id": "dM84RqBNFLZZYdew", "name": "Airtable Personal Access Token account" } }
+    },
+    {
+      "id": "e4e61539-0ddb-4b5d-9b2f-e5a317de7518",
+      "name": "update_book",
+      "type": "n8n-nodes-base.airtableTool",
+      "typeVersion": 2.2,
+      "position": [100, 900],
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Update an existing book in the Books table. First call search_books to get the record id of the exact book, then pass that id plus the new Quantity on Hand and Min Quantity (send the current value for any field the user is not changing).",
+        "resource": "record",
+        "operation": "update",
+        "base": { "__rl": true, "value": "app36dsMp7OBecovO", "mode": "list", "cachedResultName": "Book Inventory Tracker", "cachedResultUrl": "https://airtable.com/app36dsMp7OBecovO" },
+        "table": { "__rl": true, "value": "tblynJGo0IyKf5ujd", "mode": "list", "cachedResultName": "Books", "cachedResultUrl": "https://airtable.com/app36dsMp7OBecovO/tblynJGo0IyKf5ujd" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $fromAI(\"recordId\", \"Airtable record id of the book to update, e.g. recXXXXXXXXXXXXXX, taken from search_books results\", \"string\") }}",
+            "Quantity on Hand": "={{ $fromAI(\"Quantity_on_Hand\", \"New Quantity on Hand for the book\", \"number\") }}",
+            "Min Quantity": "={{ $fromAI(\"Min_Quantity\", \"New Min Quantity for the book\", \"number\") }}"
+          },
+          "matchingColumns": ["id"],
+          "schema": [
+            { "id": "id", "displayName": "id", "required": false, "defaultMatch": true, "display": true, "type": "string", "readOnly": true, "removed": false },
+            { "id": "Quantity on Hand", "displayName": "Quantity on Hand", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "number", "readOnly": false, "removed": false },
+            { "id": "Min Quantity", "displayName": "Min Quantity", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "number", "readOnly": false, "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": { "typecast": true }
+      },
+      "credentials": { "airtableTokenApi": { "id": "dM84RqBNFLZZYdew", "name": "Airtable Personal Access Token account" } }
+    },
+    {
+      "id": "114f2769-4928-4cac-b9f8-106625af0b15",
+      "name": "create_book",
+      "type": "n8n-nodes-base.airtableTool",
+      "typeVersion": 2.2,
+      "position": [100, 1050],
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Add a NEW book to the Books table. Only use when search_books shows the book does not exist yet.",
+        "resource": "record",
+        "operation": "create",
+        "base": { "__rl": true, "value": "app36dsMp7OBecovO", "mode": "list", "cachedResultName": "Book Inventory Tracker", "cachedResultUrl": "https://airtable.com/app36dsMp7OBecovO" },
+        "table": { "__rl": true, "value": "tblynJGo0IyKf5ujd", "mode": "list", "cachedResultName": "Books", "cachedResultUrl": "https://airtable.com/app36dsMp7OBecovO/tblynJGo0IyKf5ujd" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Title": "={{ $fromAI(\"Title\", \"Book title\", \"string\") }}",
+            "Author": "={{ $fromAI(\"Author\", \"Book author\", \"string\") }}",
+            "ISBN": "={{ $fromAI(\"ISBN\", \"ISBN, empty string if unknown\", \"string\") }}",
+            "Genre": "={{ $fromAI(\"Genre\", \"Genre, empty string if unknown\", \"string\") }}",
+            "Format": "={{ $fromAI(\"Format\", \"Format such as Paperback or Hardcover, empty string if unknown\", \"string\") }}",
+            "Publisher": "={{ $fromAI(\"Publisher\", \"Publisher, empty string if unknown\", \"string\") }}",
+            "Location": "={{ $fromAI(\"Location\", \"Shelf/location, empty string if unknown\", \"string\") }}",
+            "Quantity on Hand": "={{ $fromAI(\"Quantity_on_Hand\", \"Starting quantity on hand\", \"number\") }}",
+            "Min Quantity": "={{ $fromAI(\"Min_Quantity\", \"Min quantity, use 2 if not given\", \"number\") }}",
+            "Reorder Threshold": "={{ $fromAI(\"Reorder_Threshold\", \"Reorder threshold, use 0 if not given\", \"number\") }}",
+            "Unit Cost": "={{ $fromAI(\"Unit_Cost\", \"Unit cost, use 0 if not given\", \"number\") }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "Title", "displayName": "Title", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "string", "readOnly": false, "removed": false },
+            { "id": "Author", "displayName": "Author", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "string", "readOnly": false, "removed": false },
+            { "id": "ISBN", "displayName": "ISBN", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "string", "readOnly": false, "removed": false },
+            { "id": "Genre", "displayName": "Genre", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "string", "readOnly": false, "removed": false },
+            { "id": "Publisher", "displayName": "Publisher", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "string", "readOnly": false, "removed": false },
+            { "id": "Format", "displayName": "Format", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "string", "readOnly": false, "removed": false },
+            { "id": "Quantity on Hand", "displayName": "Quantity on Hand", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "number", "readOnly": false, "removed": false },
+            { "id": "Reorder Threshold", "displayName": "Reorder Threshold", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "number", "readOnly": false, "removed": false },
+            { "id": "Location", "displayName": "Location", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "string", "readOnly": false, "removed": false },
+            { "id": "Unit Cost", "displayName": "Unit Cost", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "number", "readOnly": false, "removed": false },
+            { "id": "Min Quantity", "displayName": "Min Quantity", "required": false, "defaultMatch": false, "canBeUsedToMatch": true, "display": true, "type": "number", "readOnly": false, "removed": false }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": { "typecast": true }
+      },
+      "credentials": { "airtableTokenApi": { "id": "dM84RqBNFLZZYdew", "name": "Airtable Personal Access Token account" } }
+    }
+  ],
+  "connections": {
+    "When chat message received": { "main": [[{ "node": "AI Agent", "type": "main", "index": 0 }]] },
+    "OpenAI Chat Model": { "ai_languageModel": [[{ "node": "AI Agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Simple Memory": { "ai_memory": [[{ "node": "AI Agent", "type": "ai_memory", "index": 0 }]] },
+    "search_books": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] },
+    "update_book": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] },
+    "create_book": { "ai_tool": [[{ "node": "AI Agent", "type": "ai_tool", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
